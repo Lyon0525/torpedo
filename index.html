@@ -3,275 +3,271 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Klasszikus Torpedó Játék</title>
+    <title>Online Multi Torpedó</title>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
         :root {
-            --bg-color: #1a1a24;
-            --panel-bg: #242432;
-            --text-color: #e2e8f0;
-            --ocean: #1e3a8a;
-            --ship: #64748b;
+            --bg: #0f172a;
+            --panel: #1e293b;
+            --ocean: #0284c7;
+            --ship: #475569;
             --hit: #ef4444;
-            --miss: #38bdf8;
-            --border: #334155;
+            --miss: #cbd5e1;
+            --text: #f8fafc;
         }
-
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-color);
+            font-family: sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
             margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
         }
-
-        h1 { margin-bottom: 5px; color: #60a5fa; }
-        #status { font-size: 1.2rem; margin-bottom: 20px; font-weight: bold; min-height: 28px; }
-
-        .game-container {
-            display: flex;
-            gap: 40px;
-            flex-wrap: wrap;
-            justify-content: center;
-            background: var(--panel-bg);
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-        }
-
-        .board-container { text-align: center; }
-        .board-title { margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px; }
-
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(10, 35px);
-            grid-template-rows: repeat(10, 35px);
-            gap: 2px;
-            background-color: var(--border);
-            padding: 2px;
-            border-radius: 4px;
-        }
-
-        .cell {
-            width: 35px;
-            height: 35px;
-            background-color: var(--ocean);
-            border-radius: 2px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        /* Hajó látható stílusa */
-        .cell.ship { background-color: var(--ship); }
-        /* Találat és mellé */
-        .cell.hit { background-color: var(--hit) !important; position: relative; }
-        .cell.hit::after { content: '✕'; color: white; display: flex; justify-content: center; align-items: center; height: 100%; font-weight: bold; }
-        .cell.miss { background-color: var(--miss) !important; position: relative; }
-        .cell.miss::after { content: '•'; color: white; display: flex; justify-content: center; align-items: center; height: 100%; font-size: 1.5rem; }
-
-        /* Ha az ellenség tábláját nézzük, a hajó rejtve van */
-        .enemy-board .cell.ship { background-color: var(--ocean); }
-        .enemy-board .cell:hover:not(.hit):not(.miss) { background-color: #2563eb; }
-
-        /* Takaró ernyő a körök között */
-        #screen-shield {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(15, 23, 42, 0.95);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-        }
-
-        button {
-            background: #2563eb;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            font-size: 1.1rem;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            margin-top: 20px;
-            transition: background 0.2s;
-        }
-        button:hover { background: #1d4ed8; }
-        
+        h1 { color: #38bdf8; margin-bottom: 5px; }
+        .lobby, .setup-screen, .game-container { background: var(--panel); padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-top: 15px; }
         .hidden { display: none !important; }
+        input, button { padding: 10px; font-size: 1rem; border-radius: 4px; border: none; margin: 5px; }
+        input { background: #334155; color: white; }
+        button { background: #0284c7; color: white; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0369a1; }
+        .boards { display: flex; gap: 30px; flex-wrap: wrap; margin-top: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(10, 32px); gap: 2px; background: #334155; padding: 2px; }
+        .cell { width: 32px; height: 32px; background: var(--ocean); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .cell.ship { background: var(--ship); }
+        .cell.hit { background: var(--hit); }
+        .cell.hit::after { content: '✕'; color: white; }
+        .cell.miss { background: var(--miss); }
+        .cell.miss::after { content: '•'; color: #0f172a; font-size: 1.5rem; }
+        .enemy .cell.ship { background: var(--ocean); } /* Elrejti az ellenség hajóit */
+        #status { font-size: 1.2rem; font-weight: bold; margin: 15px; color: #f59e0b; }
     </style>
 </head>
 <body>
 
-    <h1>Torpedó</h1>
-    <div id="status">1. Játékos helyezi el a hajóit...</div>
+    <h1>Online Torpedó</h1>
+    <div id="status">Kapcsolódás a hálózathoz...</div>
 
-    <div id="screen-shield" class="hidden">
-        <h2 id="shield-message">Következik: 2. Játékos</h2>
-        <p>Add át a gépet, majd kattints a folytatáshoz!</p>
-        <button onclick="hideShield()">Kör megkezdése</button>
+    <div id="lobby-screen" class="lobby hidden">
+        <h3>Csatlakozás játékhoz</h3>
+        <p>A te neved/ID-d: <strong id="my-id" style="color:#38bdf8">...</strong></p>
+        <hr style="border-color:#334155">
+        <label>Írd be a partnered ID-ját:</label><br>
+        <input type="text" id="peer-id-input" placeholder="Partner ID-ja">
+        <button id="connect-btn">Kapcsolódás</button>
     </div>
 
-    <div class="game-container">
-        <div class="board-container">
-            <div class="board-title">Saját flottád</div>
-            <div id="my-grid" class="grid"></div>
-        </div>
-        <div class="board-container">
-            <div class="board-title">Ellenséges terület (Ide lőj)</div>
-            <div id="enemy-grid" class="grid enemy-board"></div>
+    <div id="setup-screen" class="setup-screen hidden">
+        <h3>Helyezd el a hajóidat!</h3>
+        <p>Kattints a bal oldali táblára a hajóid (5 db négyzet) lerakásához.</p>
+        <p>Lerakva: <span id="placed-count">0</span> / 5</p>
+        <button id="ready-btn" disabled style="background:#64748b;">Készen állok</button>
+    </div>
+
+    <div id="game-screen" class="game-container hidden">
+        <div class="boards">
+            <div>
+                <h4>Saját flottád</h4>
+                <div id="my-grid" class="grid"></div>
+            </div>
+            <div>
+                <h4>Ellenséges terület (Ide lőj)</h4>
+                <div id="enemy-grid" class="grid enemy"></div>
+            </div>
         </div>
     </div>
 
     <script>
         const BOARD_SIZE = 10;
-        // Előre meghatározott hajó pozíciók a gyors játékhoz (X, Y koordináták)
-        // 0 = üres, 1 = hajó
-        const player1Ships = [
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,1,1,1,1,0,0,0,0,0],
-            [0,0,0,0,0,0,1,1,1,0],
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,1,1,0,0,0,0,0,0,0],
-            [0,0,0,0,0,1,1,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,1,1,1,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0]
-        ];
+        let peer = null;
+        let conn = null;
+        
+        let myShips = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        let enemyShipsPlaced = false;
+        let myShipsPlacedCount = 0;
+        
+        let myShots = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        let enemyShots = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        
+        let amIHost = false;
+        let myTurn = false;
+        let gameStarted = false;
 
-        const player2Ships = [
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,1,1,1,1],
-            [0,1,1,1,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,1,1,0,0,0],
-            [0,0,1,1,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,1,1,1,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0],
-            [0,0,0,0,0,0,0,0,0,0]
-        ];
+        // PeerJS inicializálása (Véletlenszerű szobaszámot generál)
+        const randomId = 'torpedo-' + Math.floor(1000 + Math.random() * 9000);
+        peer = new Peer(randomId);
 
-        // Játék állapotkövetése (0: még nem lőttek, 2: mellé, 3: talált)
-        let player1Board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
-        let player2Board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        peer.on('open', (id) => {
+            document.getElementById('my-id').innerText = id;
+            document.getElementById('status').innerText = "Válassz: Küldd el az ID-d a barátodnak, vagy írd be az övét!";
+            document.getElementById('lobby-screen').classList.remove('hidden');
+        });
 
-        let currentPlayer = 1;
-        let gameActive = true;
+        // Ha valaki csatlakozik hozzánk (Mi vagyunk a Host-ok)
+        peer.on('connection', (connection) => {
+            conn = connection;
+            amIHost = true;
+            setupConnection();
+        });
 
-        const myGridEl = document.getElementById('my-grid');
-        const enemyGridEl = document.getElementById('enemy-grid');
-        const statusEl = document.getElementById('status');
-        const shieldEl = document.getElementById('screen-shield');
-        const shieldMsgEl = document.getElementById('shield-message');
+        // Ha mi csatlakozunk valakihez
+        document.getElementById('connect-btn').addEventListener('click', () => {
+            const targetId = document.getElementById('peer-id-input').value.trim();
+            if(targetId) {
+                document.getElementById('status').innerText = "Kapcsolódás...";
+                conn = peer.connect(targetId);
+                amIHost = false;
+                setupConnection();
+            }
+        });
 
-        function initGame() {
-            renderBoards();
-            statusEl.innerText = "1. Játékos köre! Támadd az ellenséges területet!";
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('lobby-screen').classList.add('hidden');
+                document.getElementById('setup-screen').classList.remove('hidden');
+                document.getElementById('game-screen').classList.remove('hidden');
+                document.getElementById('status').innerText = "Sikeres kapcsolat! Pakold le a hajóidat.";
+                myTurn = amIHost; // A kihívó (Host) kezd majd
+                buildSetupGrid();
+            });
+
+            // Bejövő adatok kezelése játék közben
+            conn.on('data', (data) => {
+                if (data.type === 'READY') {
+                    enemyShipsPlaced = true;
+                    checkGameStart();
+                }
+                if (data.type === 'SHOT') {
+                    handleEnemyShot(data.r, data.c);
+                }
+                if (data.type === 'RESULT') {
+                    handleShotResult(data.r, data.c, data.result, data.won);
+                }
+            });
         }
 
-        function renderBoards() {
-            myGridEl.innerHTML = '';
-            enemyGridEl.innerHTML = '';
-
-            const currentShips = currentPlayer === 1 ? player1Ships : player2Ships;
-            const currentHits = currentPlayer === 1 ? player1Board : player2Board;
-            
-            const enemyShips = currentPlayer === 1 ? player2Ships : player1Ships;
-            const enemyHits = currentPlayer === 1 ? player2Board : player1Board;
-
-            // 1. Saját tábla kirajzolása
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                for (let c = 0; c < BOARD_SIZE; c++) {
+        // Hajóelhelyezési rács felépítése
+        function buildSetupGrid() {
+            const myGrid = document.getElementById('my-grid');
+            myGrid.innerHTML = '';
+            for(let r=0; r<BOARD_SIZE; r++) {
+                for(let c=0; c<BOARD_SIZE; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
-                    if (currentShips[r][c] === 1) cell.classList.add('ship');
-                    if (currentHits[r][c] === 2) cell.classList.add('miss');
-                    if (currentHits[r][c] === 3) cell.classList.add('hit');
-                    myGridEl.appendChild(cell);
+                    cell.addEventListener('click', () => {
+                        if(gameStarted) return;
+                        if(myShips[r][c] === 0 && myShipsPlacedCount < 5) {
+                            myShips[r][c] = 1;
+                            cell.classList.add('ship');
+                            myShipsPlacedCount++;
+                        } else if(myShips[r][c] === 1) {
+                            myShips[r][c] = 0;
+                            cell.classList.remove('ship');
+                            myShipsPlacedCount--;
+                        }
+                        document.getElementById('placed-count').innerText = myShipsPlacedCount;
+                        document.getElementById('ready-btn').disabled = myShipsPlacedCount !== 5;
+                        document.getElementById('ready-btn').style.background = myShipsPlacedCount === 5 ? '#10b981' : '#64748b';
+                    });
+                    myGrid.appendChild(cell);
                 }
             }
+            // Ellenség üres táblájának előkészítése
+            buildEnemyGrid();
+        }
 
-            // 2. Ellenséges tábla kirajzolása (ide lehet lőni)
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                for (let c = 0; c < BOARD_SIZE; c++) {
+        function buildEnemyGrid() {
+            const enemyGrid = document.getElementById('enemy-grid');
+            enemyGrid.innerHTML = '';
+            for(let r=0; r<BOARD_SIZE; r++) {
+                for(let c=0; c<BOARD_SIZE; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'cell';
-                    if (enemyShips[r][c] === 1) cell.classList.add('ship'); // CSS elrejti a .enemy-board miatt
-                    if (enemyHits[r][c] === 2) cell.classList.add('miss');
-                    if (enemyHits[r][c] === 3) cell.classList.add('hit');
-                    
-                    // Lövés esemény
-                    cell.addEventListener('click', () => handleShot(r, c));
-                    enemyGridEl.appendChild(cell);
+                    cell.addEventListener('click', () => {
+                        if(!gameStarted || !myTurn || myShots[r][c] !== 0) return;
+                        // Lövés küldése a másiknak
+                        conn.send({ type: 'SHOT', r: r, c: c });
+                        myTurn = false;
+                        document.getElementById('status').innerText = "A másik játékosra vársz... ⏳";
+                    });
+                    enemyGrid.appendChild(cell);
                 }
             }
         }
 
-        function handleShot(row, col) {
-            if (!gameActive) return;
+        // Készen áll gomb megnyomása
+        document.getElementById('ready-btn').addEventListener('click', () => {
+            document.getElementById('setup-screen').classList.add('hidden');
+            conn.send({ type: 'READY' });
+            myShipsPlacedCount = -1; // lezárva
+            checkGameStart();
+        });
 
-            const enemyShips = currentPlayer === 1 ? player2Ships : player1Ships;
-            const enemyHits = currentPlayer === 1 ? player2Board : player1Board;
-
-            // Ha már lőtt ide, ne csináljon semmit
-            if (enemyHits[row][col] !== 0) return;
-
-            // Találat ellenőrzés
-            if (enemyShips[row][col] === 1) {
-                enemyHits[row][col] = 3; // Talált
-                renderBoards();
-                if (checkWin(enemyShips, enemyHits)) {
-                    statusEl.innerText = `🎉 JÁTÉK VÉGE! A(z) ${currentPlayer}. Játékos győzött!`;
-                    gameActive = false;
-                } else {
-                    statusEl.innerText = `Talált! ${currentPlayer}. Játékos újra lőhet!`;
-                }
+        function checkGameStart() {
+            if(myShipsPlacedCount === -1 && enemyShipsPlaced) {
+                gameStarted = true;
+                updateTurnStatus();
             } else {
-                enemyHits[row][col] = 2; // Mellé
-                renderBoards();
-                statusEl.innerText = "Mellé!";
-                gameActive = false; // Megállítjuk a kört a váltásig
-                
-                // 1.5 másodperc múlva feldobjuk a váltóképernyőt
-                setTimeout(() => {
-                    if (gameActive === false && checkWin(enemyShips, enemyHits) === false) {
-                        showShield();
-                    }
-                }, 1500);
+                document.getElementById('status').innerText = "Várakozás a másik játékos hajóira... ⏳";
             }
         }
 
-        function checkWin(ships, hits) {
-            for (let r = 0; r < BOARD_SIZE; r++) {
-                for (let c = 0; c < BOARD_SIZE; c++) {
-                    if (ships[r][c] === 1 && hits[r][c] !== 3) {
-                        return false; // Van még élő hajó
-                    }
+        function updateTurnStatus() {
+            if(myTurn) {
+                document.getElementById('status').innerText = "🔴 TE JÖSSZ! Támadj!";
+            } else {
+                document.getElementById('status').innerText = "A másik játékosra vársz... ⏳";
+            }
+        }
+
+        // Amikor az ELLENSÉG lő belénk
+        function handleEnemyShot(r, c) {
+            let isHit = myShips[r][c] === 1;
+            enemyShots[r][c] = isHit ? 3 : 2;
+            
+            // Frissítsük a saját táblánkat a képernyőn
+            const index = r * BOARD_SIZE + c;
+            const myCells = document.getElementById('my-grid').children;
+            myCells[index].classList.add(isHit ? 'hit' : 'miss');
+
+            // Megnézzük vesztettünk-e
+            let lost = true;
+            for(let i=0; i<BOARD_SIZE; i++) {
+                for(let j=0; j<BOARD_SIZE; j++) {
+                    if(myShips[i][j] === 1 && enemyShots[i][j] !== 3) lost = false;
                 }
             }
-            return true;
+
+            // Visszaküldjük az eredményt a lövőnek
+            conn.send({ type: 'RESULT', r: r, c: c, result: isHit ? 'HIT' : 'MISS', won: lost });
+
+            if(lost) {
+                document.getElementById('status').innerText = "❌ Vesztettél! Az összes hajód elsüllyedt.";
+                gameStarted = false;
+            } else {
+                myTurn = true; // Mi jövünk, mert ő lőtt
+                updateTurnStatus();
+            }
         }
 
-        function showShield() {
-            currentPlayer = currentPlayer === 1 ? 2 : 1;
-            shieldMsgEl.innerText = `Következik: ${currentPlayer}. Játékos`;
-            shieldEl.classList.remove('hidden');
-        }
+        // Amikor megkapjuk a MI LÖVÉSÜNK eredményét
+        function handleShotResult(r, c, result, enemyWon) {
+            myShots[r][c] = result === 'HIT' ? 3 : 2;
+            
+            const index = r * BOARD_SIZE + c;
+            const enemyCells = document.getElementById('enemy-grid').children;
+            enemyCells[index].classList.add(result === 'HIT' ? 'hit' : 'miss');
 
-        function hideShield() {
-            shieldEl.classList.add('hidden');
-            gameActive = true;
-            statusEl.innerText = `${currentPlayer}. Játékos köre!`;
-            renderBoards();
+            if(enemyWon) {
+                document.getElementById('status').innerText = "🎉 GYŐZELEM! Elsüllyesztetted az összes hajóját!";
+                gameStarted = false;
+            } else {
+                // A torpedó szabály szerint: ha találtál, újra te jössz, ha mellé, a másik jön
+                myTurn = (result === 'HIT');
+                updateTurnStatus();
+            }
         }
-
-        // Játék indítása
-        initGame();
     </script>
 </body>
 </html>
