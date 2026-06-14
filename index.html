@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Klasszikus Torpedó Játék</title>
+    <style>
+        :root {
+            --bg-color: #1a1a24;
+            --panel-bg: #242432;
+            --text-color: #e2e8f0;
+            --ocean: #1e3a8a;
+            --ship: #64748b;
+            --hit: #ef4444;
+            --miss: #38bdf8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { margin-bottom: 5px; color: #60a5fa; }
+        #status { font-size: 1.2rem; margin-bottom: 20px; font-weight: bold; min-height: 28px; }
+
+        .game-container {
+            display: flex;
+            gap: 40px;
+            flex-wrap: wrap;
+            justify-content: center;
+            background: var(--panel-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .board-container { text-align: center; }
+        .board-title { margin-bottom: 10px; font-size: 1.1rem; letter-spacing: 1px; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(10, 35px);
+            grid-template-rows: repeat(10, 35px);
+            gap: 2px;
+            background-color: var(--border);
+            padding: 2px;
+            border-radius: 4px;
+        }
+
+        .cell {
+            width: 35px;
+            height: 35px;
+            background-color: var(--ocean);
+            border-radius: 2px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        /* Hajó látható stílusa */
+        .cell.ship { background-color: var(--ship); }
+        /* Találat és mellé */
+        .cell.hit { background-color: var(--hit) !important; position: relative; }
+        .cell.hit::after { content: '✕'; color: white; display: flex; justify-content: center; align-items: center; height: 100%; font-weight: bold; }
+        .cell.miss { background-color: var(--miss) !important; position: relative; }
+        .cell.miss::after { content: '•'; color: white; display: flex; justify-content: center; align-items: center; height: 100%; font-size: 1.5rem; }
+
+        /* Ha az ellenség tábláját nézzük, a hajó rejtve van */
+        .enemy-board .cell.ship { background-color: var(--ocean); }
+        .enemy-board .cell:hover:not(.hit):not(.miss) { background-color: #2563eb; }
+
+        /* Takaró ernyő a körök között */
+        #screen-shield {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+
+        button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+        button:hover { background: #1d4ed8; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <h1>Torpedó</h1>
+    <div id="status">1. Játékos helyezi el a hajóit...</div>
+
+    <div id="screen-shield" class="hidden">
+        <h2 id="shield-message">Következik: 2. Játékos</h2>
+        <p>Add át a gépet, majd kattints a folytatáshoz!</p>
+        <button onclick="hideShield()">Kör megkezdése</button>
+    </div>
+
+    <div class="game-container">
+        <div class="board-container">
+            <div class="board-title">Saját flottád</div>
+            <div id="my-grid" class="grid"></div>
+        </div>
+        <div class="board-container">
+            <div class="board-title">Ellenséges terület (Ide lőj)</div>
+            <div id="enemy-grid" class="grid enemy-board"></div>
+        </div>
+    </div>
+
+    <script>
+        const BOARD_SIZE = 10;
+        // Előre meghatározott hajó pozíciók a gyors játékhoz (X, Y koordináták)
+        // 0 = üres, 1 = hajó
+        const player1Ships = [
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,1,1,1,1,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,1,1,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,1,1,1,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        const player2Ships = [
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,1,1,1,1],
+            [0,1,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,1,1,0,0,0],
+            [0,0,1,1,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,1,1,1,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0],
+            [0,0,0,0,0,0,0,0,0,0]
+        ];
+
+        // Játék állapotkövetése (0: még nem lőttek, 2: mellé, 3: talált)
+        let player1Board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+        let player2Board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(0));
+
+        let currentPlayer = 1;
+        let gameActive = true;
+
+        const myGridEl = document.getElementById('my-grid');
+        const enemyGridEl = document.getElementById('enemy-grid');
+        const statusEl = document.getElementById('status');
+        const shieldEl = document.getElementById('screen-shield');
+        const shieldMsgEl = document.getElementById('shield-message');
+
+        function initGame() {
+            renderBoards();
+            statusEl.innerText = "1. Játékos köre! Támadd az ellenséges területet!";
+        }
+
+        function renderBoards() {
+            myGridEl.innerHTML = '';
+            enemyGridEl.innerHTML = '';
+
+            const currentShips = currentPlayer === 1 ? player1Ships : player2Ships;
+            const currentHits = currentPlayer === 1 ? player1Board : player2Board;
+            
+            const enemyShips = currentPlayer === 1 ? player2Ships : player1Ships;
+            const enemyHits = currentPlayer === 1 ? player2Board : player1Board;
+
+            // 1. Saját tábla kirajzolása
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (currentShips[r][c] === 1) cell.classList.add('ship');
+                    if (currentHits[r][c] === 2) cell.classList.add('miss');
+                    if (currentHits[r][c] === 3) cell.classList.add('hit');
+                    myGridEl.appendChild(cell);
+                }
+            }
+
+            // 2. Ellenséges tábla kirajzolása (ide lehet lőni)
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    if (enemyShips[r][c] === 1) cell.classList.add('ship'); // CSS elrejti a .enemy-board miatt
+                    if (enemyHits[r][c] === 2) cell.classList.add('miss');
+                    if (enemyHits[r][c] === 3) cell.classList.add('hit');
+                    
+                    // Lövés esemény
+                    cell.addEventListener('click', () => handleShot(r, c));
+                    enemyGridEl.appendChild(cell);
+                }
+            }
+        }
+
+        function handleShot(row, col) {
+            if (!gameActive) return;
+
+            const enemyShips = currentPlayer === 1 ? player2Ships : player1Ships;
+            const enemyHits = currentPlayer === 1 ? player2Board : player1Board;
+
+            // Ha már lőtt ide, ne csináljon semmit
+            if (enemyHits[row][col] !== 0) return;
+
+            // Találat ellenőrzés
+            if (enemyShips[row][col] === 1) {
+                enemyHits[row][col] = 3; // Talált
+                renderBoards();
+                if (checkWin(enemyShips, enemyHits)) {
+                    statusEl.innerText = `🎉 JÁTÉK VÉGE! A(z) ${currentPlayer}. Játékos győzött!`;
+                    gameActive = false;
+                } else {
+                    statusEl.innerText = `Talált! ${currentPlayer}. Játékos újra lőhet!`;
+                }
+            } else {
+                enemyHits[row][col] = 2; // Mellé
+                renderBoards();
+                statusEl.innerText = "Mellé!";
+                gameActive = false; // Megállítjuk a kört a váltásig
+                
+                // 1.5 másodperc múlva feldobjuk a váltóképernyőt
+                setTimeout(() => {
+                    if (gameActive === false && checkWin(enemyShips, enemyHits) === false) {
+                        showShield();
+                    }
+                }, 1500);
+            }
+        }
+
+        function checkWin(ships, hits) {
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (ships[r][c] === 1 && hits[r][c] !== 3) {
+                        return false; // Van még élő hajó
+                    }
+                }
+            }
+            return true;
+        }
+
+        function showShield() {
+            currentPlayer = currentPlayer === 1 ? 2 : 1;
+            shieldMsgEl.innerText = `Következik: ${currentPlayer}. Játékos`;
+            shieldEl.classList.remove('hidden');
+        }
+
+        function hideShield() {
+            shieldEl.classList.add('hidden');
+            gameActive = true;
+            statusEl.innerText = `${currentPlayer}. Játékos köre!`;
+            renderBoards();
+        }
+
+        // Játék indítása
+        initGame();
+    </script>
+</body>
+</html>
